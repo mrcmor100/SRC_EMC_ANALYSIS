@@ -1,0 +1,9 @@
+#Exclude directories:
+csTables/*
+dataDir/*
+runList/*
+
+#But keep the root folder:
+!csTables/.gitkeep
+!dataDir/.gitkeep
+!runList/.gitkeep
