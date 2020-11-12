@@ -22,7 +22,7 @@ double GetInpVar(std::fstream& file, unsigned int num);
 std::fstream& GetTblLine(std::fstream& file, unsigned int num);
 double phase_space, sigtot, lummc, lumfract, fract;
 
-int implicitMCWgt(int kin, string targ, int model, bool snapshot=false) {
+int implicitMCWgt(int kin, string targ, int model, bool snapshot=false, bool doCSBCorr = true) {
 
   TH1DModel m_xFocalMCWgt ("h_xFocalMCWgt","Weighted Monte-Carlo: X_{fp}; X_{fp} (cm); Number of Entries / 5 mm",100, -40, 40);
   TH1DModel m_xpFocalMCWgt("h_xpFocalMCWgt","Weighted Monte-Carlo: X'_{fp}; X'_{fp}; Number of Entries / 2 mrad",100, -100.0, 100.0);
@@ -32,7 +32,7 @@ int implicitMCWgt(int kin, string targ, int model, bool snapshot=false) {
   TH1DModel m_xpTarMCWgt  ("h_xpTarMCWgt","Weighted Monte-Carlo: X'_{tar}; X'_{tar}; Number of Entries / 2 mrad",100, -100.0, 100.0);
   TH1DModel m_ypTarMCWgt  ("h_ypTarMCWgt","Weighted Monte-Carlo: Y'_{tar}; Y'_{tar}; Number of Entries / 2 mrad",100, -100.0, 100.0);
   TH1DModel m_deltaMCWgt  ("h_deltaMCWgt","Weighted Monte-Carlo: #delta; #delta; Number of Entries",60, -30, 30);
-  TH1DModel m_thetaMCWgt  ("h_thetaMCWgt","Weighted Monte-Carlo: #theta; #theta; Number of Entries / 0.01 deg",200, 8.0, 18.0);
+  TH1DModel m_thetaMCWgt  ("h_thetaMCWgt","Weighted Monte-Carlo: #theta; #theta; Number of Entries / 0.01 deg",400, 5.0, 45.0);
   TH1DModel m_q2MCWgt     ("h_q2MCWgt","Weighted Monte-Carlo: Q^{2}; Q^{2} (GeV^{2}); Number of Entries / 0.025 GeV^{2}",240, 0.0, 6.0);
   TH1DModel m_w2MCWgt     ("h_w2MCWgt","Weighted Monte-Carlo: W^{2}; W^{2} (GeV^{2}); Number of Entries / 0.050 GeV^{2}",375, -10.0, 20.0);
   TH1DModel m_xbjMCWgt    ("h_xbjMCWgt","Weighted Monte-Carlo: X_{bj}; X_{bj}; Number of Entries / 0.050", 120, 0.0, 3.0);
@@ -120,7 +120,7 @@ int implicitMCWgt(int kin, string targ, int model, bool snapshot=false) {
 
   double dep          = (delup - deldown) / 100. * hsec;
   double dxp          = (dxpup - dxpdown);
-  double dyp          = (dxpup - dxpdown);
+  double dyp          = (dypup - dypdown);
   phase_space = dxp*dyp*dep / 1000.0;
   cout << "=============================================\n";
   cout << "              Phase Space                    \n";
@@ -153,8 +153,8 @@ int implicitMCWgt(int kin, string targ, int model, bool snapshot=false) {
 //  double lumdata = (density * tar_length / at_mass * 3758.72141467515);
   double lumdata = (aerial_density / at_mass * 3758.72141467515);
   //NEED ONLY APPLY TO CRYO TARGETS SILLY!!!!
-  if(std::strcmp(targ.c_str(),"H1")==0) {cCorrFact = 0.966;;}
-  else if(std::strcmp(targ.c_str(),"D2")==0) {cCorrFact = 0.966;;}
+  if(std::strcmp(targ.c_str(),"H1")==0) {cCorrFact = 0.996;}
+  else if(std::strcmp(targ.c_str(),"D2")==0) {cCorrFact = 0.996;}
   else {cout << "No Cryo Correction solid Target: " << targ.c_str() << endl;
    cCorrFact = 1.0;
   }
@@ -233,8 +233,15 @@ int implicitMCWgt(int kin, string targ, int model, bool snapshot=false) {
   auto q2Calc = [=] (double hse, double sin2) {return 4.0*hse*beamEnergy*sin2;};
   auto w2Calc = [=] (double nu, double q2) {return mp2 + 2.*mp*nu - q2;};
   auto xbjCalc = [=] (double q2, double nu) {return q2 / (2*mp*nu);};
-  auto dtCalc = [=] (double thetaini) {return thetaini - thetac;};
-  auto phaseSpCorCalc = [] (float psxptari, float psyptari) {return 1./TMath::Power((1+TMath::Power(psxptari,2)+TMath::Power(psyptari,2)),(3/2));};
+  auto phaseSpCorCalc = [] (float psxptar, float psyptar) {return 1./TMath::Power((1+TMath::Power(psxptar,2)+TMath::Power(psyptar,2)),(3/2));};
+  auto csbCorCalc = [=] (double thetaini, double nu) {
+    if(doCSBCorr) {
+      Double_t csb_p0=-2.09 * thetaini*180./TMath::Pi() + 12.47;
+      Double_t csb_p1=0.2 * thetaini*180./TMath::Pi() - 0.6338;
+      return TMath::Exp(csb_p0)*(TMath::Exp(csb_p1*(nu))-1);
+    }
+    else return 0.0;
+  };
 
   //Open the unweighted root tree files. chain with 1411
   ROOT::EnableImplicitMT();
@@ -245,23 +252,22 @@ int implicitMCWgt(int kin, string targ, int model, bool snapshot=false) {
              .Filter("stop_id == 0");
 
   //Add releveant branches
-  d2 = d2.Define("hse", hseCalc, {"psdeltai"})
-         .Define("xptari_mrad", rad2mrad, {"psxptari"})
-         .Define("yptari_mrad", rad2mrad, {"psyptari"})
+  d2 = d2.Define("hse", hseCalc, {"psdelta"})
+         .Define("xptari_mrad", rad2mrad, {"psxptar"})
+         .Define("yptari_mrad", rad2mrad, {"psyptar"})
          .Define("xptar_mrad", rad2mrad, {"psxptar"})
          .Define("yptar_mrad", rad2mrad, {"psyptar"})
          .Define("xpfp_mrad", rad2mrad, {"psxpfp"})
          .Define("ypfp_mrad", rad2mrad, {"psypfp"})
-         .Define("thetaini", thetainiCalc, {"psyptari","psxptari"})
+         .Define("thetaini", thetainiCalc, {"psyptar","psxptar"})
          .Define("hstheta", hsthetaCalc, {"psyptar","psxptar"})
          .Define("sin2", sin2Calc , {"thetaini"})
          .Define("nu", nuCalc , {"hse"})
          .Define("q2", q2Calc, {"hse","sin2"})
          .Define("w2", w2Calc, {"nu","q2"})
          .Define("xbj", xbjCalc, {"q2","nu"})
-         .Define("dt", dtCalc, {"thetaini"})
-         .Define("phasespcor", phaseSpCorCalc, {"psxptari","psyptari"});
-  //yptarrec    = psyptar-ypcor;
+         .Define("csbCorr",csbCorCalc,{"thetaini","nu"})
+         .Define("phasespcor", phaseSpCorCalc, {"psxptar","psyptar"});
 
   auto radCorCalc = [&] (double w2, double thetaini) {
     double radCorFac = rt->Interpolate(w2, TMath::RadToDeg()*thetaini);
@@ -282,19 +288,19 @@ int implicitMCWgt(int kin, string targ, int model, bool snapshot=false) {
   auto ngenCutBorn = [=] (double born) {
     return born > 0.0;
   };
-  auto ngenCut = [=] (float yptari, float xptari, float deltai) {
+  auto ngenCut = [=] (float yptari, float xptari, float deltai, float ytar) {
     return (xptari < dxpup/1000. && xptari > dxpdown/1000. && yptari < dypup/1000. && 
-	    yptari > dypdown / 1000. && deltai > deldown && deltai < delup);
+	    yptari > dypdown / 1000. && deltai > deldown && deltai < delup && abs(ytar) < 10.0);
   };
 
   cout << "=============================================\n";
   cout << "            Monte Carlo Events               \n";
   cout << "=============================================\n";
-  auto ngenPassed = d3.Filter(ngenCut,{"psyptar","psxptar","psdeltai"}).Count();
+  auto ngenPassed = d3.Filter(ngenCut,{"psyptar","psxptar","psdelta","psytar"}).Count();
   cout << *ngenPassed << " events made it to the detector\n  within the phase space.\n";
   auto ngenPassedBorn = d3.Filter(ngenCutBorn,{"born"}).Count();
   cout << *ngenPassedBorn << " events many events passed the\n  born cut and are in phase space.\n";
-  auto ngen = d.Filter(ngenCut,{"psyptar","psxptar","psdeltai"}).Count();
+  auto ngen = d.Count();
   cout << *ngen << " events were generated in the\n  gen limits of  the monte-carlo.\n";
   cout << endl << endl;
 
@@ -305,7 +311,7 @@ int implicitMCWgt(int kin, string targ, int model, bool snapshot=false) {
   cout << " Fract: " << fract << endl;
   cout << endl << endl;
 
-  auto mcWgtCalc = [=] (double born, double phasespcor) {return born*phasespcor*fract;};
+  auto mcWgtCalc = [=] (double born, double phasespcor, double csb) {return (born + csb)*phasespcor*fract;};
 
   cout << "=============================================\n";
   cout << "                   Output                    \n";
@@ -314,11 +320,11 @@ int implicitMCWgt(int kin, string targ, int model, bool snapshot=false) {
   cout << Form(mcComparisonFile,kin, model, targ.c_str()) << endl;
   cout << endl << endl;
 
-  d3 = d3.Define("mcWgt", mcWgtCalc, {"born","phasespcor"});
+  d3 = d3.Define("mcWgt", mcWgtCalc, {"born","phasespcor","csbCorr"});
 
   if(snapshot) {
     d3.Snapshot("MCWgtTree",Form(mcComparisonFile,kin, model, targ.c_str()),
-		{"mcWgt, born","w2","hse","phasespcor","thetaini","deltai","psyptari","psxptari"}
+		{"mcWgt, born","w2","hse","phasespcor","thetaini","deltai","psyptar","psxptar"}
 		,snapshotOptions);
   }
   compFile  = new TFile(Form(mcComparisonFile,kin, model, targ.c_str()), "UPDATE");

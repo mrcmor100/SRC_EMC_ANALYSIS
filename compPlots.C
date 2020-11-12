@@ -99,22 +99,6 @@ const char* mcComparisonFile = "./dataToMC/kin%d_m%dc_%s.root";
 double d2r    = 3.14159 / 180.;
 double beamEnergy, hsec, thetac;
 
-
-double cal_ep (double momentum, double delta) {
-  return (momentum * (1 + delta / 100));
-}
-
-double cal_w2 (double Mp, double eb, double thetai, double ep) {
-  return (Mp*Mp + 2.* Mp*(eb - ep) - 4.*eb*ep*(TMath::Power(TMath::Sin(0.5* d2r*thetai),2)));
-}
-
-double cal_xbj(double eb, double thetai, double Mp, double ep) {
-  return ((eb*ep*(1.0 - TMath::Cos(d2r*thetai)))/(Mp*(eb - ep)));
-}
-double cal_xbj2(double eb, double ep, double thetai, double Mp) {
-  return (4*eb*ep * pow(sin(d2r*thetai / 2),2) / (2*Mp*(eb-ep)));
-}
-
 std::fstream& GetTblLine(std::fstream& file, unsigned int num){
     file.seekg(std::ios::beg);
     for(int i=0; i < num - 1; ++i){
@@ -131,58 +115,7 @@ void compPlots(int kin , const char* targ, int model, Double_t scaleFactor = 1) 
   if(std::strcmp(targ,"H1")==0) {doSub = true;}
   else if(std::strcmp(targ,"D2")==0) {doSub=true;}
   else {doSub = false; }
-
-//============================================
-//   Input Kinematics Settings for MC
-//============================================
-  string kinFile         = kinFileDir;
-  float hsec, thetac;
-  fstream kinTblFile(kinFile);
-  //Kin0 has a 2% offset in hsec.  
-  GetTblLine(kinTblFile, kin+1);  //Changes pointer.
-  kinTblFile >> beamEnergy >> hsec >> thetac;
-  cout << beamEnergy << " " << hsec << " " << thetac << endl;
-
-
-  const char* csTableDir = "/volatile/hallc/xem2/cmorean/cs_tables/kin%d_%s_m%d.out";
-  string csTableFile     = Form(csTableDir,kin, targ, model);
-
-  TGraph2D *born = new TGraph2D();
-  TGraph2D *xt = new TGraph2D();
-  TGraph2D *cst = new TGraph2D();
   
-  //variables to hold elements in each line
-  double beamEnergy, ep, theta, x_bj, Q2, amu, radCorrFactor, C_cor;
-  double Sig_Born, Sig_Born_In, Sig_Born_QE,
-    Sig_Rad, Sig_Rad_EL, Sig_Rad_QE, Sig_Rad_DIS;
-  int i = 0;
-  string line;
-  ifstream crossFile(csTableFile);
-
-  //Open file
-  while(getline(crossFile, line)) {
-    if(i == 0) {
-      i+=1;
-      continue;
-    }
-    istringstream ss(line);
-    i+=1;
-    ss >> beamEnergy >> ep >> theta  >> x_bj >> Q2 >>
-      Sig_Born >> Sig_Born_In >> Sig_Born_QE >> Sig_Rad >>
-      Sig_Rad_EL >> Sig_Rad_QE >> Sig_Rad_DIS >> C_cor;
-    
-    if(i%50 == 0) {
-      cout << ep << " " << theta << " " << x_bj << " " << Sig_Rad  << endl;
-    }
-    if(x_bj < 1.95) {
-      born->SetPoint(i, ep, theta, Sig_Born);
-      xt->SetPoint(i, ep, theta, x_bj);
-      cst->SetPoint(i, ep, theta, Sig_Rad);
-    }
-  }
-  
-  //Aluminum Scale Factors
-  Bool_t cryo = false;
   // Global ROOT settings
   gStyle->SetOptStat(0);
   
@@ -731,48 +664,9 @@ void compPlots(int kin , const char* targ, int model, Double_t scaleFactor = 1) 
   h2_yVypFocalData->Draw("COLZ");
 
   
-  //inFile->Write();
   inFile->cd();
   c_tarComp->Write();
   c_kinComp->Write();
   c_focalComp->Write();
   c_tarComp2->Write();
-  /*
-  double w2, eprime, xbj, bornBin;
-  Double_t dBin, dBinContent, dBinError;
-  //Loop Over Range in dp:
-  int nDeltaBins;
-  nDeltaBins = h_deltaRatio->GetNbinsX();
-  TVectorD bornCSErrArr(1000);
-  TVectorD bornCSArr(1000);
-  TVectorD xbjErrArr(1000);
-  TVectorD xbjArr(1000);
-  cout << "dBin dBinError xsec xsecErr eprime xbj\n";
-  for(int i = 0; i < nDeltaBins; i++) 
-  {
-    dBin = h_deltaRatio->GetXaxis()->GetBinCenter(i+1);
-    dBinContent = h_deltaRatio->GetBinContent(i+1);
-    dBinError = h_deltaRatio->GetBinError(i+1);
-    eprime = cal_ep(hsec, dBin);
-    w2     = cal_w2(protonMass, beamEnergy, thetac, eprime);
-    xbj    = cal_xbj2(beamEnergy, eprime, thetac, protonMass);
-    bornBin = born->Interpolate(eprime, thetac);
-    if(dBinContent != 0 ){
-    bornCSArr[i] = dBinContent * bornBin;
-    bornCSErrArr[i] = dBinError * bornBin;
-    xbjArr[i] = xbj;
-    }
-    //if(bornBin > 0.0) {
-      cout << dBin << " " << dBinError << " " << dBinContent * bornBin << " " << dBinError * bornBin << " " << eprime << " " << xbj << " " << endl;
-      //}
-    //Grab the error from the delta histo
-    //Multiply error of delta histo by born CS
-    //Save point-by-point data somehow for CS...
-  }
-  TGraphErrors *gr = new TGraphErrors(xbjArr, bornCSArr, xbjErrArr, bornCSErrArr);
-  TCanvas *c1 = new TCanvas();
-  c1->cd();
-  gr->Draw();
-    //Save results
-    */
 }

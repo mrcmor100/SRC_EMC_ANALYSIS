@@ -25,8 +25,6 @@ TH2F *h2_ngcerEff = dynamic_cast <TH2F*> (ngcerEffFile->FindObjectAny("histEff")
 
 int aluminumSubtraction(TFile *compFile, int kin, string targ, int model);
 
-Double_t calc_CalEff(Double_t ePrime);
-
 Double_t getNorm(string fileList, string effTblFile, string targ);
 
 std::fstream& GetTblLine(std::fstream& file, unsigned int num);
@@ -36,6 +34,7 @@ TChain *formChain(string list, string format);
 
 
 int implicitCryo(int kin , string targ, int model, bool snapshot=false) {
+  int failCer = 0;
 
   TH1DModel m_xFocalData ("h_xFocalData" , "Data: X_{fp}; X_{fp} (cm); Number of Entries / 5 mm"  , 100,  -40  ,  40  );
   TH1DModel m_xpFocalData("h_xpFocalData", "Data: X'_{fp}; X'_{fp}; Number of Entries / 2 mrad"   , 100, -100.0, 100.0);
@@ -114,10 +113,9 @@ int implicitCryo(int kin , string targ, int model, bool snapshot=false) {
   auto calcCerEff = [&](double yFocalData, double ypFocalData, double xFocalData, double xpFocalData) {
     double xCer = xFocalData - 89.1*xpFocalData;
     double yCer = yFocalData - 89.1*ypFocalData;
-    int xBin    = h2_ngcerEff->GetYaxis()->FindBin(xCer);
-    int yBin    = h2_ngcerEff->GetXaxis()->FindBin(yCer);
-    double cerEff  = h2_ngcerEff->GetBinContent(yBin,xBin);
-    return cerEff==0 ? 1 : cerEff;
+    double cerEff  = h2_ngcerEff->GetBinContent(h2_ngcerEff->FindBin(yCer,xCer));
+    if(cerEff==0) {failCer+=1;}
+    return cerEff==0 ? 1.0 : cerEff;
   };
   auto rad2mrad   = [](double pFocalData) {
     return pFocalData*1000.0;
@@ -140,7 +138,7 @@ int implicitCryo(int kin , string targ, int model, bool snapshot=false) {
     .Filter("P.bcm.bcm4c.AvgCurrent > 5")
     .Filter("abs(P.gtr.ph) < 0.1")
     .Filter("abs(P.gtr.th) < 0.1")
-    .Filter("abs(P.gtr.y) < 6.0");
+    .Filter("abs(P.gtr.y) < 10.0");
     //.Filter("P.dc.InsideDipoleExit==1")
     //.Filter("T.shms.pEDTM_tdcTimeRaw==0.0");  //Remove because not valuable
  //.Filter("P.gtr.beta > 0.5 && P.gtr.beta < 1.5")
@@ -154,7 +152,7 @@ int implicitCryo(int kin , string targ, int model, bool snapshot=false) {
          .Define("P_dc_ypfp_mrad",rad2mrad, {"P.dc.yp_fp"})
          .Define("P_theta"       ,getTheta, {"P.gtr.ph"}  )
          .Define("caloEff",calcCalEff,{"P.gtr.dp"})
-         .Define("cerEff",calcCerEff,{"P.dc.y_fp","P.gtr.ph","P.dc.x_fp","P.gtr.th"})
+         .Define("cerEff",calcCerEff,{"P.dc.y_fp","P.dc.yp_fp","P.dc.x_fp","P.dc.xp_fp"})
          .Define("totalWeight", weightAll, {"caloEff","cerEff"});
 
   auto nEvents = d2.Count();
@@ -204,6 +202,11 @@ int implicitCryo(int kin , string targ, int model, bool snapshot=false) {
   cout << "Output File is:\n" << 
     Form(mcComparisonFile,kin, model, targ.c_str()) << 
     endl << endl << endl;
+
+  cout << "=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:\n";
+  cout << "                 Failed Cherenkov \n";
+  cout << "=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:\n";
+  cout << "Failed Cherenkov Interp.: " << failCer << "\n" << endl << endl << endl;
 
   // Create data directory and descend into it
   dataDir = dynamic_cast <TDirectory*> (compFile->Get("dataDir"));
@@ -285,8 +288,11 @@ Double_t getNorm(string fileList, string effTblFile, string targ) {
   //cout << "=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:\n";
 
   double slopeVal = 0;
-  double LD2_slope = 3.42/10000.; //Casey's slopes !?!?!?
-  double LH2_slope = 5.3314/10000.;
+  //double LD2_slope = 3.42/10000.; //Casey's slopes
+  //double LH2_slope = 5.3314/10000.;
+
+  double LD2_slope = 3.798/10000.; //F2 comparison slopes
+  double LH2_slope = 2.675/10000.;
 
   //double LD2_slope = 0.00080029; //Carlos's Slopes
   //double LH2_slope = 0.00063396;
@@ -327,10 +333,6 @@ Double_t getNorm(string fileList, string effTblFile, string targ) {
   cout << "=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:\n";
   cout << " The total Normalization is: " << sumCharge << endl << endl;
   return sumCharge;
-}
-
-Double_t calc_CalEff(Double_t ePrime) {
-  return 0.998394241 - TMath::Exp(-1.98 - 0.2356 * TMath::Power(ePrime, 3));
 }
 
 int aluminumSubtraction(TFile *compFile, int kin, string targ, int model) {
