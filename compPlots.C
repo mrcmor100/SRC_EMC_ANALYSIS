@@ -4,11 +4,12 @@
 // Author: Eric Pooser, pooser@jlab.org
 
 bool doSub = false;
+bool doC12Sub = false;
 
 // Input ROOT file created via mc_reweight.C
 TFile *inFile;
 // Input ROOT file directories
-TDirectory *mcWgtDir, *dataDir, *subDataDir, *alumDir;
+TDirectory *mcWgtDir, *dataDir, *subDataDir, *alumDir, *carbDir;
 // Weighted 1D MC histos
 TH1D *h_xFocalMCWgt, *h_xpFocalMCWgt, *h_yFocalMCWgt, *h_ypFocalMCWgt;
 TH1D *h_yTarMCWgt, *h_xpTarMCWgt, *h_ypTarMCWgt, *h_deltaMCWgt;
@@ -114,6 +115,8 @@ void compPlots(int kin , const char* targ, int model, Double_t scaleFactor = 1) 
 
   if(std::strcmp(targ,"H1")==0) {doSub = true;}
   else if(std::strcmp(targ,"D2")==0) {doSub=true;}
+  else if(std::strcmp(targ,"B10")==0) {doSub=true;doC12Sub=true;}
+  else if(std::strcmp(targ,"B11")==0) {doSub=true;doC12Sub=true;}
   else {doSub = false; }
   
   // Global ROOT settings
@@ -126,6 +129,7 @@ void compPlots(int kin , const char* targ, int model, Double_t scaleFactor = 1) 
   dataDir  = dynamic_cast <TDirectory*> (inFile->FindObjectAny("dataDir"));
   subDataDir  = dynamic_cast <TDirectory*> (inFile->FindObjectAny("subDataDir"));
   alumDir  = dynamic_cast <TDirectory*> (inFile->FindObjectAny("alumDir"));
+  carbDir  = dynamic_cast <TDirectory*> (inFile->FindObjectAny("carbDir"));
   //dataDir  = dynamic_cast <TDirectory*> (inFile->GetMotherDir(););
 
   // Obtain the 1D histograms of interest
@@ -151,6 +155,30 @@ void compPlots(int kin , const char* targ, int model, Double_t scaleFactor = 1) 
     h_q2Data     = dynamic_cast <TH1D*> (dataDir->FindObjectAny("h_q2Data"));
     h_w2Data     = dynamic_cast <TH1D*> (dataDir->FindObjectAny("h_w2Data"));
     h_xbjData    = dynamic_cast <TH1D*> (dataDir->FindObjectAny("h_xbjData"));
+
+  } else if(doSub==true && doC12Sub==true){
+    h_yTarData   = dynamic_cast <TH1D*> (subDataDir->FindObjectAny("h_yTarSubData"));
+    h_xFocalData = dynamic_cast <TH1D*> (subDataDir->FindObjectAny("h_xFocalSubData"));
+    h_yFocalData = dynamic_cast <TH1D*> (subDataDir->FindObjectAny("h_yFocalSubData"));
+    h_xpTarData  = dynamic_cast <TH1D*> (subDataDir->FindObjectAny("h_xpTarSubData"));
+    h_ypTarData  = dynamic_cast <TH1D*> (subDataDir->FindObjectAny("h_ypTarSubData"));
+    h_deltaData  = dynamic_cast <TH1D*> (subDataDir->FindObjectAny("h_deltaSubData"));
+    h_thetaData  = dynamic_cast <TH1D*> (subDataDir->FindObjectAny("h_thetaSubData"));
+    h_q2Data     = dynamic_cast <TH1D*> (subDataDir->FindObjectAny("h_q2SubData"));
+    h_w2Data     = dynamic_cast <TH1D*> (subDataDir->FindObjectAny("h_w2SubData"));
+    h_xbjData    = dynamic_cast <TH1D*> (subDataDir->FindObjectAny("h_xbjSubData"));
+
+    h_yTarAlData   = dynamic_cast <TH1D*> (carbDir->FindObjectAny("h_yTarC12Data"));
+    h_xFocalAlData = dynamic_cast <TH1D*> (carbDir->FindObjectAny("h_xFocalC12Data"));
+    h_yFocalAlData = dynamic_cast <TH1D*> (carbDir->FindObjectAny("h_yFocalC12Data"));
+    h_xpTarAlData  = dynamic_cast <TH1D*> (carbDir->FindObjectAny("h_xpTarC12Data"));
+    h_ypTarAlData  = dynamic_cast <TH1D*> (carbDir->FindObjectAny("h_ypTarC12Data"));
+    h_deltaAlData  = dynamic_cast <TH1D*> (carbDir->FindObjectAny("h_deltaC12Data"));
+    h_thetaAlData  = dynamic_cast <TH1D*> (carbDir->FindObjectAny("h_thetaC12Data"));
+    h_q2AlData     = dynamic_cast <TH1D*> (carbDir->FindObjectAny("h_q2C12Data"));
+    h_w2AlData     = dynamic_cast <TH1D*> (carbDir->FindObjectAny("h_w2C12Data"));
+    h_xbjAlData    = dynamic_cast <TH1D*> (carbDir->FindObjectAny("h_xbjC12Data"));
+
   } else {
     h_yTarData   = dynamic_cast <TH1D*> (subDataDir->FindObjectAny("h_yTarSubData"));
     h_xFocalData = dynamic_cast <TH1D*> (subDataDir->FindObjectAny("h_xFocalSubData"));
@@ -173,8 +201,8 @@ void compPlots(int kin , const char* targ, int model, Double_t scaleFactor = 1) 
     h_q2AlData     = dynamic_cast <TH1D*> (alumDir->FindObjectAny("h_q2AlData"));
     h_w2AlData     = dynamic_cast <TH1D*> (alumDir->FindObjectAny("h_w2AlData"));
     h_xbjAlData    = dynamic_cast <TH1D*> (alumDir->FindObjectAny("h_xbjAlData"));
-
   }
+
   // Obtain the 2D histos of interest
   h2_xVxpFocalMCWgt  = dynamic_cast <TH2D*> (mcWgtDir->FindObjectAny("h2_xVxpFocalMCWgt"));
   h2_xVyFocalMCWgt   = dynamic_cast <TH2D*> (mcWgtDir->FindObjectAny("h2_xVyFocalMCWgt"));

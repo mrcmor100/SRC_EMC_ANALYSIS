@@ -10,10 +10,10 @@ auto snapshotOptions = RSnapshotOptions("UPDATE",ROOT::kZLIB,1,0,99,false);
 
 const char* kinFileDir          = "./runList/kinSettingsAll.dat";
 const char* dataRunlistDir      = "./runList/kin%d_%s_runs.dat";
-const char* runEfficienciesFile = "./runList/xgt1_2018Efficiencies.dat";
+const char* runEfficienciesFile = "./runList/xgt1_2018Efficiencies2.dat";
 const char* mcComparisonFile    = "./dataToMC/kin%d_m%dc_%s.root";
 
-const char* pathTo2018Replays = "./realpass-3c-shms-data/shms_replay_production_%d_-1.root";
+const char* pathTo2018Replays = "./dataDir/shms_replay_production_%d_-1.root";
 const char* pathTo2019Replays = "/cache/hallc/E12-10-008/cmorean/realpass-3b-data/shms_replay_production_%d_-1.root";
 
 TFile *compFile;
@@ -24,6 +24,7 @@ TFile *ngcerEffFile = TFile::Open("./NGCER_Efficiencies.root"); //Fix rel. dir.
 TH2F *h2_ngcerEff = dynamic_cast <TH2F*> (ngcerEffFile->FindObjectAny("histEff"));
 
 int aluminumSubtraction(TFile *compFile, int kin, string targ, int model);
+int carbonSubtraction(TFile *compFile, int kin, string targ, int model);
 
 Double_t getNorm(string fileList, string effTblFile, string targ);
 
@@ -138,7 +139,7 @@ int implicitCryo(int kin , string targ, int model, bool snapshot=false) {
     .Filter("P.bcm.bcm4c.AvgCurrent > 5")
     .Filter("abs(P.gtr.ph) < 0.1")
     .Filter("abs(P.gtr.th) < 0.1")
-    .Filter("abs(P.gtr.y) < 10.0");
+    .Filter("abs(P.gtr.y) < 4.0");
     //.Filter("P.dc.InsideDipoleExit==1")
     //.Filter("T.shms.pEDTM_tdcTimeRaw==0.0");  //Remove because not valuable
  //.Filter("P.gtr.beta > 0.5 && P.gtr.beta < 1.5")
@@ -236,6 +237,7 @@ int implicitCryo(int kin , string targ, int model, bool snapshot=false) {
   h2_xpVypTarData->Write();
 
   aluminumSubtraction(compFile, kin, targ, model);
+  carbonSubtraction(compFile, kin, targ, model);
 
   compFile->Close();
 
@@ -269,7 +271,7 @@ std::fstream& GetTblLine(std::fstream& file, unsigned int num){
 Double_t getNorm(string fileList, string effTblFile, string targ) {
   //Vars from eff tbl
   int ps;
-  double chg, current, oCurrent, trkEff, clt, elt;
+  double chg, current, oCurrent, trkEff, clt, eltDaveM, eltBill;
   Double_t sumCharge = 0;
   //Get initial run from runList
   fstream runList(fileList);
@@ -307,19 +309,19 @@ Double_t getNorm(string fileList, string effTblFile, string targ) {
     istringstream ss(runLine);
     ss >> runNo;
     if (runNo == currentRun) {
-      ss >> ps >> chg >> current >> oCurrent >> trkEff >> clt >> elt;
+      ss >> ps >> chg >> current >> trkEff >> clt >> eltBill >> eltDaveM;
       cout << "=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:\n";
       cout << " Run Number: " << runNo << endl <<
 	" Cut Charge from Report Output File: " << chg << endl <<
 	" Cut Current from Report Output File: " << current << endl <<
 	" Tracking Efficiency: " << trkEff << endl <<
 	" Computer Live Time: " << clt << endl << 
-	" Electronic Live Time: " << elt << endl << 
+	" Electronic Live Time: " << eltDaveM << endl << 
 	" Pre-Scale: " << ps << endl;
       boil_corr = (1. - slopeVal * current);
       if(std::strcmp(targ.c_str(),"H1")==0) {cout << " Boiling Correction for run " << runNo << " is: " << boil_corr << endl;}
       else if(std::strcmp(targ.c_str(),"D2")==0) {cout << " Boiling Correction for run " << runNo << " is: " << boil_corr << endl;}
-      sumCharge += (chg*(clt * boil_corr * trkEff * elt/ ps));
+      sumCharge += (chg*(clt * boil_corr * trkEff * eltDaveM/ ps));
       cout << " SumCharge: " << sumCharge << endl;
       //Next run.
       getline(runList, runEntry);
@@ -528,6 +530,207 @@ int aluminumSubtraction(TFile *compFile, int kin, string targ, int model) {
   h_xbjSubData->Write();
 
   alumFile->Close();
+
+  return 0;
+}
+
+
+int carbonSubtraction(TFile *compFile, int kin, string targ, int model) {
+
+  // Carbon Data histos
+  TH1D *h_xFocalC12Data, *h_xpFocalC12Data, *h_yFocalC12Data, *h_ypFocalC12Data;
+  TH1D *h_yTarC12Data, *h_xpTarC12Data, *h_ypTarC12Data, *h_deltaC12Data;
+  TH1D *h_thetaC12Data, *h_q2C12Data, *h_w2C12Data, *h_xbjC12Data;
+  
+  //Subtracted Data Data histos
+  TH1D *h_xFocalSubData, *h_xpFocalSubData, *h_yFocalSubData, *h_ypFocalSubData;
+  TH1D *h_yTarSubData, *h_xpTarSubData, *h_ypTarSubData, *h_deltaSubData;
+  TH1D *h_thetaSubData, *h_q2SubData, *h_w2SubData, *h_xbjSubData;
+
+  static const Double_t  cFactor = 0.04366;
+  static const Double_t  b10Factor = 0.5722/(4.0*10.012938+12.0107);
+  static const Double_t  b11Factor = 0.6348/(4.0*11.009305+12.0107);
+  Float_t dummyFactor, bFactor;
+
+  cout << "=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:\n";
+  cout << "            Carbon Subtraction\n";
+  cout << "=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:\n";
+  if(std::strcmp(targ.c_str(),"B10")==0) {dummyFactor = cFactor;
+    bFactor = b10Factor;
+    cout << " Subtracting Carbon from: " << targ.c_str() << endl << endl;
+  }
+  else if(std::strcmp(targ.c_str(),"B11")==0) {dummyFactor = cFactor;
+    bFactor = b11Factor;
+    cout << " Subtracting Carbon from: " << targ.c_str() << endl << endl;
+  }
+  else {
+    cout << " Not Subtracting Carbon from: " << targ.c_str() << endl << endl;
+    return 0;
+  }
+
+  TFile *carbFile;
+  TDirectory *carbDir, *unsubDataDir, *carbDataDir;
+  TDirectory *subDataDir;
+  const char* carbFilePattern;
+  const char* carbFilePath;
+  carbFilePattern = "./dataToMC/kin%d_m%dc_%s.root";
+  carbFilePath = Form(carbFilePattern, kin, model, "C12");
+  if(!gSystem->AccessPathName(carbFilePath)) {
+    carbFile = new TFile(carbFilePath, "READ");
+    carbFile->cd();
+    carbDataDir = dynamic_cast <TDirectory*> (carbFile->Get("dataDir"));
+    if(!carbDataDir) {
+      cout << "=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:\n";
+      cout << "ERROR! No dataDir in Carbon File\n\n";
+      return 0;
+    }
+  } else {
+    cout << "=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:\n";
+    cout << "ERROR: No Carbon File found for kin:" <<
+      kin << "and model:  " << model << endl << endl;
+    return 0;
+  }
+
+  // Carbon Data 1D histos
+  h_xFocalC12Data  = dynamic_cast <TH1D*> (carbDataDir->Get("h_xFocalData")->Clone("h_xFocalC12Data"));
+  h_xFocalC12Data->SetTitle("C12Data: X_{fp}; X_{fp} (cm); Number of Entries / 5 mm");
+  h_xpFocalC12Data = dynamic_cast <TH1D*> (carbDataDir->Get("h_xpFocalData")->Clone("h_xpFocalC12Data"));
+  h_xpFocalC12Data->SetTitle("C12Data: X'_{fp}; X'_{fp}; Number of Entries / 2 mrad");
+  h_yFocalC12Data  = dynamic_cast <TH1D*> (carbDataDir->Get("h_yFocalData")->Clone("h_yFocalC12Data"));
+  h_yFocalC12Data->SetTitle("C12Data: Y_{fp}; Y_{fp} (cm); Number of Entries / 5 mm");
+  h_ypFocalC12Data = dynamic_cast <TH1D*> (carbDataDir->Get("h_ypFocalData")->Clone("h_ypFocalC12Data"));
+  h_ypFocalC12Data->SetTitle("C12Data: Y'_{fp}; Y'_{fp}; Number of Entries / 2 mrad");
+  h_yTarC12Data    = dynamic_cast <TH1D*> (carbDataDir->Get("h_yTarData")->Clone("h_yTarC12Data"));
+  h_yTarC12Data->SetTitle("C12Data: Y_{tar}; Y_{tar} (cm); Number of Entries / 1 mm");
+  h_xpTarC12Data   = dynamic_cast <TH1D*> (carbDataDir->Get("h_xpTarData")->Clone("h_xpTarC12Data"));
+  h_xpTarC12Data->SetTitle("C12Data: X'_{tar}; X'_{tar}; Number of Entries / 2 mrad");
+  h_ypTarC12Data   = dynamic_cast <TH1D*> (carbDataDir->Get("h_ypTarData")->Clone("h_ypTarC12Data"));
+  h_ypTarC12Data->SetTitle("C12Data: Y'_{tar}; Y'_{tar}; Number of Entries / 2 mrad");
+  h_deltaC12Data   = dynamic_cast <TH1D*> (carbDataDir->Get("h_deltaData")->Clone("h_deltaC12Data"));
+  h_deltaC12Data->SetTitle("C12Data: #delta; #delta; Number of Entries");
+  h_thetaC12Data   = dynamic_cast <TH1D*> (carbDataDir->Get("h_thetaData")->Clone("h_thetaC12Data"));
+  h_thetaC12Data->SetTitle("C12Data: #theta; #theta; Number of Entries / 0.01 deg");
+  h_q2C12Data      = dynamic_cast <TH1D*> (carbDataDir->Get("h_q2Data")->Clone("h_q2C12Data"));
+  h_q2C12Data->SetTitle("C12Data: Q^{2}; Q^{2} (GeV^{2}); Number of Entries / 0.025 GeV^{2}");
+  h_w2C12Data      = dynamic_cast <TH1D*> (carbDataDir->Get("h_w2Data")->Clone("h_w2C12Data"));
+  h_w2C12Data->SetTitle("C12Data: W^{2}; W^{2} (GeV^{2}); Number of Entries / 0.050 GeV^{2}");
+  h_xbjC12Data     = dynamic_cast <TH1D*> (carbDataDir->Get("h_xbjData")->Clone("h_xbjC12Data"));
+  h_xbjC12Data->SetTitle("C12Data: X_{bj}; X_{bj}; Number of Entries;");
+
+  //Normalize based on dummy factor
+  h_xFocalC12Data->Scale(dummyFactor);
+  h_xpFocalC12Data->Scale(dummyFactor);
+  h_yFocalC12Data->Scale(dummyFactor);
+  h_ypFocalC12Data->Scale(dummyFactor);
+  h_yTarC12Data->Scale(dummyFactor);
+  h_xpTarC12Data->Scale(dummyFactor);
+  h_ypTarC12Data->Scale(dummyFactor);
+  h_deltaC12Data->Scale(dummyFactor);
+  h_thetaC12Data->Scale(dummyFactor);
+  h_q2C12Data->Scale(dummyFactor);
+  h_w2C12Data->Scale(dummyFactor);
+  h_xbjC12Data->Scale(dummyFactor);
+
+  compFile->cd();
+  carbDir = dynamic_cast <TDirectory*> (compFile->Get("carbDir"));
+  if(!carbDir) {
+    carbDir = compFile->mkdir("carbDir");
+    carbDir->cd();
+  } else if(carbDir) {
+    compFile->rmdir("carbDir");
+    carbDir = compFile->mkdir("carbDir");
+    carbDir->cd();
+  }
+
+  //Save to the Carbon Directory
+  h_xFocalC12Data->Write();
+  h_xpFocalC12Data->Write();
+  h_yFocalC12Data->Write();
+  h_ypFocalC12Data->Write();
+  h_yTarC12Data->Write();
+  h_xpTarC12Data->Write();
+  h_ypTarC12Data->Write();
+  h_deltaC12Data->Write();
+  h_thetaC12Data->Write();
+  h_q2C12Data->Write();
+  h_w2C12Data->Write();
+  h_xbjC12Data->Write();
+
+  compFile->cd("../");
+  unsubDataDir = dynamic_cast <TDirectory*> (compFile->Get("dataDir"));
+  if(!unsubDataDir) {
+    cout << "=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:\n";
+    cout << "ERROR!  No data in file.\n";
+    cout << "=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:=:\n";
+    return 0;
+  }
+  //Soon-to-be subtracted Data 1D histos
+  h_xFocalSubData  = dynamic_cast <TH1D*> (unsubDataDir->Get("h_xFocalData")->Clone("h_xFocalSubData"));
+  h_xFocalSubData->SetTitle("subData: X_{fp}; X_{fp} (cm); Number of Entries / 5 mm");
+  h_xpFocalSubData = dynamic_cast <TH1D*> (unsubDataDir->Get("h_xpFocalData")->Clone("h_xpFocalSubData"));
+  h_xpFocalSubData->SetTitle("subData: X'_{fp}; X'_{fp}; Number of Entries / 2 mrad");
+  h_yFocalSubData  = dynamic_cast <TH1D*> (unsubDataDir->Get("h_yFocalData")->Clone("h_yFocalSubData"));
+  h_yFocalSubData->SetTitle("subData: Y_{fp}; Y_{fp} (cm); Number of Entries / 5 mm");
+  h_ypFocalSubData = dynamic_cast <TH1D*> (unsubDataDir->Get("h_ypFocalData")->Clone("h_ypFocalSubData"));
+  h_ypFocalSubData->SetTitle("subData: Y'_{fp}; Y'_{fp}; Number of Entries / 2 mrad");
+  h_yTarSubData    = dynamic_cast <TH1D*> (unsubDataDir->Get("h_yTarData")->Clone("h_yTarSubData"));
+  h_yTarSubData->SetTitle("subData: Y_{tar}; Y_{tar} (cm); Number of Entries / 1 mm");
+  h_xpTarSubData   = dynamic_cast <TH1D*> (unsubDataDir->Get("h_xpTarData")->Clone("h_xpTarSubData"));
+  h_xpTarSubData->SetTitle("subData: X'_{tar}; X'_{tar}; Number of Entries / 2 mrad");
+  h_ypTarSubData   = dynamic_cast <TH1D*> (unsubDataDir->Get("h_ypTarData")->Clone("h_ypTarSubData"));
+  h_ypTarSubData->SetTitle("subData: Y'_{tar}; Y'_{tar}; Number of Entries / 2 mrad");
+  h_deltaSubData   = dynamic_cast <TH1D*> (unsubDataDir->Get("h_deltaData")->Clone("h_deltaSubData"));
+  h_deltaSubData->SetTitle("subData: #delta; #delta; Number of Entries");
+  h_thetaSubData   = dynamic_cast <TH1D*> (unsubDataDir->Get("h_thetaData")->Clone("h_thetaSubData"));
+  h_thetaSubData->SetTitle("subData: #theta; #theta; Number of Entries / 0.01 deg");
+  h_q2SubData      = dynamic_cast <TH1D*> (unsubDataDir->Get("h_q2Data")->Clone("h_q2SubData"));
+  h_q2SubData->SetTitle("subData: Q^{2}; Q^{2} (GeV^{2}); Number of Entries / 0.025 GeV^{2}");
+  h_w2SubData      = dynamic_cast <TH1D*> (unsubDataDir->Get("h_w2Data")->Clone("h_w2SubData"));
+  h_w2SubData->SetTitle("subData: W^{2}; W^{2} (GeV^{2}); Number of Entries / 0.050 GeV^{2}");
+  h_xbjSubData     = dynamic_cast <TH1D*> (unsubDataDir->Get("h_xbjData")->Clone("h_xbjSubData"));
+  h_xbjSubData->SetTitle("subData: X_{bj}; X_{bj}; Number of Entries;");
+
+  //Check, create and descend into subDataDir
+  subDataDir = dynamic_cast <TDirectory*> (compFile->Get("subDataDir"));
+  if(!subDataDir) {
+    subDataDir = compFile->mkdir("subDataDir");
+    subDataDir->cd();}
+  else if(subDataDir) {
+    compFile->rmdir("subDataDir");
+    subDataDir = compFile->mkdir("subDataDir");
+    subDataDir->cd();
+  }
+
+  //Subtract aluminum from these histograms
+  h_xFocalSubData->Add(h_xFocalSubData, h_xFocalC12Data, 1/(1.0), -1./4.0);
+  h_xpFocalSubData->Add(h_xpFocalSubData, h_xpFocalC12Data, 1/(1.0), -1./4.0);
+  h_yFocalSubData->Add(h_yFocalSubData, h_yFocalC12Data, 1/(1.0), -1./4.0);
+  h_ypFocalSubData->Add(h_ypFocalSubData, h_ypFocalC12Data, 1/(1.0), -1./4.0);
+  h_yTarSubData->Add(h_yTarSubData, h_yTarC12Data, 1/(1.0), -1./4.0);
+  h_xpTarSubData->Add(h_xpTarSubData, h_xpTarC12Data, 1/(1.0), -1./4.0);
+  h_ypTarSubData->Add(h_ypTarSubData, h_ypTarC12Data, 1/(1.0), -1./4.0);
+  h_deltaSubData->Add(h_deltaSubData, h_deltaC12Data, 1/(1.0), -1./4.0);
+  h_thetaSubData->Add(h_thetaSubData, h_thetaC12Data, 1/(1.0), -1./4.0);
+  h_q2SubData->Add(h_q2SubData, h_q2C12Data, 1/(1.0), -1./4.0);
+  h_w2SubData->Add(h_w2SubData, h_w2C12Data, 1/(1.0), -1./4.0);
+  h_xbjSubData->Add(h_xbjSubData, h_xbjC12Data, 1/(1.0), -1./4.0);
+
+  //Save the Carbon subtracted data
+  subDataDir->cd();
+  h_xFocalSubData->Write();
+  h_xpFocalSubData->Write();
+  h_yFocalSubData->Write();
+  h_ypFocalSubData->Write();
+  h_yTarSubData->Write();
+  h_xpTarSubData->Write();
+  h_ypTarSubData->Write();
+  h_deltaSubData->Write();
+  h_thetaSubData->Write();
+  h_q2SubData->Write();
+  h_w2SubData->Write();
+  h_xbjSubData->Write();
+
+  carbFile->Close();
 
   return 0;
 }

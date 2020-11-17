@@ -22,7 +22,7 @@ double GetInpVar(std::fstream& file, unsigned int num);
 std::fstream& GetTblLine(std::fstream& file, unsigned int num);
 double phase_space, sigtot, lummc, lumfract, fract;
 
-int implicitMCWgt(int kin, string targ, int model, bool snapshot=false, bool doCSBCorr = true) {
+int implicitMCWgt(int kin, string targ, int model, bool snapshot=false, bool doCSBCorr = false) {
 
   TH1DModel m_xFocalMCWgt ("h_xFocalMCWgt","Weighted Monte-Carlo: X_{fp}; X_{fp} (cm); Number of Entries / 5 mm",100, -40, 40);
   TH1DModel m_xpFocalMCWgt("h_xpFocalMCWgt","Weighted Monte-Carlo: X'_{fp}; X'_{fp}; Number of Entries / 2 mrad",100, -100.0, 100.0);
@@ -285,7 +285,9 @@ int implicitMCWgt(int kin, string targ, int model, bool snapshot=false, bool doC
   auto d3 = d2;
   d3 = d2.Define("born", bornCalc, {"hse","thetaini"});
 
-  auto ngenCutBorn = [=] (double born) {
+  int failCtr = 0;
+  auto ngenCutBorn = [] (double ep, double th, double born) {
+    //if(born == 0 ) {cout << ep << " " << th*TMath::RadToDeg() << endl;}
     return born > 0.0;
   };
   auto ngenCut = [=] (float yptari, float xptari, float deltai, float ytar) {
@@ -298,13 +300,13 @@ int implicitMCWgt(int kin, string targ, int model, bool snapshot=false, bool doC
   cout << "=============================================\n";
   auto ngenPassed = d3.Filter(ngenCut,{"psyptar","psxptar","psdelta","psytar"}).Count();
   cout << *ngenPassed << " events made it to the detector\n  within the phase space.\n";
-  auto ngenPassedBorn = d3.Filter(ngenCutBorn,{"born"}).Count();
+  auto ngenPassedBorn = d3.Filter(ngenCutBorn,{"hse","thetaini","born"}).Count();
   cout << *ngenPassedBorn << " events many events passed the\n  born cut and are in phase space.\n";
   auto ngen = d.Count();
   cout << *ngen << " events were generated in the\n  gen limits of  the monte-carlo.\n";
   cout << endl << endl;
 
-  fract = lumdata * phase_space / *ngen / 1000.00;
+  fract = lumdata * phase_space / (*ngen + (*ngenPassed - *ngenPassedBorn)) / 1000.00;
   cout << "=============================================\n";
   cout << "           Monte Carlo Weighting             \n";
   cout << "=============================================\n";
